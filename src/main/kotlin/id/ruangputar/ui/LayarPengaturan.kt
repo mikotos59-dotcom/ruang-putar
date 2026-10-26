@@ -63,7 +63,7 @@ fun LayarPengaturan() {
                 Text("Pengaturan", Modifier.padding(top = 20.dp), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
 
                 Bagian("Tampilan")
-                BarisPilihan("Tema", listOf("batik" to "Batik", "gelap" to "Gelap", "terang" to "Terang", "otomatis" to "Ikut sistem"), p.tema) { v ->
+                BarisPilihan("Tema", listOf("batik" to "Batik", "batik-terang" to "Batik terang", "gelap" to "Gelap", "terang" to "Terang", "otomatis" to "Ikut sistem"), p.tema) { v ->
                     Status.data.ubahPengaturan { it.copy(tema = v) }
                 }
 

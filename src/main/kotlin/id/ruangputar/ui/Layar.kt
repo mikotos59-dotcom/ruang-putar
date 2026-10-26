@@ -108,7 +108,7 @@ fun LayarBeranda() {
     var tambahRak by remember { mutableStateOf(false) }
 
     GulirKolom {
-        item { KepalaBeranda(pengaturan.tema == "batik") }
+        item { KepalaBeranda(temaBatik(pengaturan.tema)) }
         if (ditahan > System.currentTimeMillis()) item { BannerDitahan() }
         if (sering.isNotEmpty()) {
             item {
