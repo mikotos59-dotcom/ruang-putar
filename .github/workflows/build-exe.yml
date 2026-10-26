@@ -1,0 +1,143 @@
+name: Build Installer
+
+on:
+  push:
+    branches: [ main, master ]
+  # Tiap Senin 03.00 WIB: cek versi baru mesin YouTube (NewPipeExtractor).
+  # Ada versi baru -> build & terbitkan Release. Tidak ada -> berhenti.
+  schedule:
+    - cron: "10 20 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cek versi mesin YouTube (NewPipeExtractor)
+        id: cek
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          kini=$(sed -n 's/^npeVersi=//p' gradle.properties | tr -d '\r')
+          terbaru=$(gh api repos/TeamNewPipe/NewPipeExtractor/releases/latest --jq .tag_name || echo "")
+          echo "Versi sekarang: $kini | terbaru: ${terbaru:-?}"
+          if [ -n "$terbaru" ] && [ "$terbaru" != "$kini" ]; then
+            sed -i "s/^npeVersi=.*/npeVersi=$terbaru/" gradle.properties
+            echo "baru=$terbaru" >> "$GITHUB_OUTPUT"
+            echo "lanjut=true" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "Mesin YouTube sudah versi terbaru - tidak perlu build."
+            echo "lanjut=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "lanjut=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Ambil libmpv (mesin pemutar suara)
+        if: steps.cek.outputs.lanjut == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          mkdir -p sumber/windows mpv-tmp
+          ambil() {
+            # $1 = repo, cari file mpv-dev-x86_64-<tanggal>-git-<hash>.7z (bukan varian v3)
+            gh api "repos/$1/releases/latest" --jq '.assets[] | select(.name | test("^mpv-dev-x86_64-[0-9]{8}-git-[0-9a-f]+\\.7z$")) | .browser_download_url' | head -n1
+          }
+          URL=$(ambil shinchiro/mpv-winbuild-cmake || true)
+          [ -z "$URL" ] && URL=$(ambil zhongfly/mpv-winbuild || true)
+          if [ -z "$URL" ]; then echo "::error::libmpv tidak ditemukan"; exit 1; fi
+          echo "Mengunduh $URL"
+          curl -sSL -o mpv-tmp/mpv.7z "$URL"
+          7z x -y -ompv-tmp mpv-tmp/mpv.7z > /dev/null
+          DLL=$(find mpv-tmp -iname 'libmpv-2.dll' | head -n1)
+          if [ -z "$DLL" ]; then echo "::error::libmpv-2.dll tidak ada di arsip"; exit 1; fi
+          cp "$DLL" sumber/windows/libmpv-2.dll
+          ls -la sumber/windows
+
+      - uses: actions/setup-java@v4
+        if: steps.cek.outputs.lanjut == 'true'
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+        if: steps.cek.outputs.lanjut == 'true'
+
+      - name: Build aplikasi
+        if: steps.cek.outputs.lanjut == 'true'
+        run: |
+          chmod +x gradlew
+          ./gradlew createDistributable --stacktrace
+          ls -la build/compose/binaries/main/app/RuangPutar
+
+      - name: Buat installer (Inno Setup)
+        id: inno
+        if: steps.cek.outputs.lanjut == 'true'
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup -y --no-progress | Out-Null
+            $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          }
+          $versi = (Select-String -Path gradle.properties -Pattern '^versiApp=(.*)$').Matches[0].Groups[1].Value.Trim()
+          $kode = ${{ github.run_number }} + 100
+          $sumber = Resolve-Path "build\compose\binaries\main\app\RuangPutar"
+          & $iscc "/DVersiApp=$versi" "/DSumber=$sumber" "installer\ruangputar.iss"
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          $asli = "dist\RuangPutar-$versi-setup.exe"
+          $baru = "dist\RuangPutar-$versi-b$kode-setup.exe"
+          Move-Item $asli $baru
+          "versi=$versi" >> $env:GITHUB_OUTPUT
+          "kode=$kode" >> $env:GITHUB_OUTPUT
+          Get-ChildItem dist
+
+      - name: Simpan versi mesin YouTube yang baru ke repo
+        if: steps.cek.outputs.baru != ''
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add gradle.properties
+          git commit -m "Mesin YouTube diperbarui ke ${{ steps.cek.outputs.baru }} [skip ci]"
+          git push
+
+      - name: Terbitkan Release (dicek oleh aplikasi)
+        if: steps.cek.outputs.lanjut == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NPE=$(sed -n 's/^npeVersi=//p' gradle.properties | tr -d '\r')
+          CATATAN="Mesin YouTube: NewPipeExtractor $NPE"
+          [ -n "${{ steps.cek.outputs.baru }}" ] && CATATAN="Pembaruan otomatis: mesin YouTube diperbarui ke $NPE"
+          [ "${{ github.event_name }}" = "push" ] && CATATAN="$(git log -1 --pretty=%s) | $CATATAN"
+          mkdir -p rilis
+          EXE=$(cd dist && ls *-setup.exe | head -n1)
+          UKURAN=$(stat -c%s "dist/$EXE")
+          jq -n --argjson kode ${{ steps.inno.outputs.kode }} \
+            --arg nama "Ruang Putar v${{ steps.inno.outputs.versi }} (build ${{ steps.inno.outputs.kode }})" \
+            --arg catatan "$CATATAN" --arg file "$EXE" --argjson ukuran $UKURAN --arg npe "$NPE" \
+            '{kode: $kode, nama: $nama, catatan: $catatan, file: $file, ukuran: $ukuran, npe: $npe}' > rilis/versi.json
+          cat rilis/versi.json
+          gh release create "b${{ steps.inno.outputs.kode }}" "dist/$EXE" rilis/versi.json \
+            --title "Ruang Putar v${{ steps.inno.outputs.versi }} (build ${{ steps.inno.outputs.kode }})" \
+            --notes "$CATATAN" --latest
+          # simpan 5 rilis terakhir saja
+          gh release list --limit 100 --json tagName --jq '.[5:][].tagName' | while read t; do
+            gh release delete "$t" --yes --cleanup-tag || true
+          done
+
+      - uses: actions/upload-artifact@v4
+        if: steps.cek.outputs.lanjut == 'true'
+        with:
+          name: RuangPutar-installer
+          path: dist/*-setup.exe
+          if-no-files-found: error
