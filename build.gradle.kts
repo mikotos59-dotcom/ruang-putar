@@ -24,6 +24,7 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.json:json:20240303")
     implementation("net.java.dev.jna:jna:5.16.0")
+    implementation("com.google.zxing:core:3.5.3")
 }
 
 java {

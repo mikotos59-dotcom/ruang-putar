@@ -151,6 +151,9 @@ fun LayarPengaturan() {
                     }, Modifier.padding(top = 6.dp)) { Text("Impor lagi") }
                 }
 
+                Bagian("Bagikan aplikasi")
+                BagianBagikan()
+
                 Bagian("Tentang")
                 Text("Ruang Putar v${Versi.NAMA} (build ${Versi.KODE})", fontWeight = FontWeight.SemiBold)
                 Text("Dibuat oleh @SuS_X_x", color = MaterialTheme.colorScheme.onSurfaceVariant)
