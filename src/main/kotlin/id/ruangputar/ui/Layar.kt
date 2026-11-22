@@ -396,6 +396,7 @@ fun LayarCari() {
                     Row(Modifier.padding(horizontal = 24.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = { Pemutar.putar(daftar) }) { Text("Putar semua") }
                         OutlinedButton(onClick = { daftar.forEach { Pemutar.antre(it) } }) { Text("Tambah ke antrean") }
+                        OutlinedButton(onClick = { Status.tambahKePlaylist = daftar }) { Text("+ Playlist") }
                     }
                 }
             } else if (!h.memuat && h.galat == null) {
@@ -429,6 +430,7 @@ fun LayarPustaka() {
                     TextButton(onClick = { Status.data.hapusRiwayat() }) { Text("Hapus riwayat") }
                 })
             }
+            TabPustaka.PLAYLIST -> DaftarPlaylist()
             TabPustaka.OFFLINE -> HalamanOffline()
             TabPustaka.PENYANYI -> HalamanDaftarPenyanyi()
         }
@@ -448,6 +450,7 @@ private fun DaftarLagu(daftar: List<Lagu>, kosong: String, ekstra: (@Composable 
                 ) {
                     Button(onClick = { Pemutar.putar(daftar) }) { Text("Putar semua") }
                     OutlinedButton(onClick = { Pemutar.putarAcak(daftar) }) { Text("Acak") }
+                    OutlinedButton(onClick = { Status.tambahKePlaylist = daftar }) { Text("+ Playlist") }
                     Text("${daftar.size} lagu", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     ekstra?.invoke()
                 }
@@ -497,7 +500,7 @@ private fun HalamanDaftarPenyanyi() {
                 Modifier.fillMaxWidth().clickable { Status.bukaPenyanyi(p.nama, p.url) }.padding(horizontal = 24.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Box(Modifier.weight(1f)) { KepalaPenyanyi(p.nama) }
+                Box(Modifier.weight(1f)) { KepalaPenyanyi(p.nama, p.foto, besar = false) }
                 Box {
                     IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "Menu") }
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
@@ -519,7 +522,7 @@ fun LayarPenyanyi(p: Penyanyi, h: Halaman) {
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 24.dp, top = 16.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { Status.tutupPenyanyi() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Kembali") }
-            Box(Modifier.weight(1f)) { KepalaPenyanyi(p.nama.ifEmpty { "Penyanyi" }) }
+            Box(Modifier.weight(1f)) { KepalaPenyanyi(p.nama.ifEmpty { "Penyanyi" }, p.foto) }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (ikut) {
                     OutlinedButton(onClick = { Status.alihIkuti(p.nama, p.url) }) { Text("✓ Diikuti") }
@@ -540,6 +543,7 @@ fun LayarPenyanyi(p: Penyanyi, h: Halaman) {
                     Row(Modifier.padding(horizontal = 24.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = { Pemutar.putar(daftar) }) { Text("Putar semua") }
                         OutlinedButton(onClick = { Pemutar.putarAcak(daftar) }) { Text("Acak") }
+                        OutlinedButton(onClick = { Status.tambahKePlaylist = daftar }) { Text("+ Playlist") }
                     }
                 }
             }

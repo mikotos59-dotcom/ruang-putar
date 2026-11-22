@@ -50,6 +50,10 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.input.pointer.PointerButton
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -141,10 +145,11 @@ fun MenuLagu(lagu: Lagu, terbuka: Boolean, tutup: () -> Unit, tambahan: List<Pai
         item("Putar setelah ini") { Pemutar.putarBerikutnya(lagu) }
         item("Tambah ke antrean") { Pemutar.antre(lagu) }
         item(if (favorit.any { it.kunci == lagu.kunci }) "Hapus dari Favorit" else "♥ Favoritkan") { Status.alihFavorit(lagu) }
+        item("Tambah ke playlist…") { Status.tambahKePlaylist = listOf(lagu) }
         if (!lagu.lokal) {
             if (!unduhan.containsKey(lagu.id)) item("Unduh ke Offline") { Status.unduh(lagu) }
             if (lagu.channel.isNotEmpty()) {
-                item("Lagu lain dari ${lagu.artis.ifEmpty { "penyanyi ini" }}") { Status.bukaPenyanyi(lagu.artis, lagu.channel) }
+                item("Lihat channel ${lagu.artis.ifEmpty { "penyanyi" }} ›") { Status.bukaPenyanyi(lagu.artis, lagu.channel) }
                 item(if (Status.data.mengikuti(lagu.channel)) "Berhenti mengikuti" else "Ikuti ${lagu.artis}") {
                     Status.alihIkuti(lagu.artis, lagu.channel)
                 }
@@ -209,10 +214,7 @@ fun BarisLagu(
                     lagu.judul, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     fontWeight = FontWeight.SemiBold, color = if (aktif) warnaAktif else MaterialTheme.colorScheme.onSurface,
                 )
-                Text(
-                    lagu.artis.ifEmpty { if (lagu.lokal) "File di PC" else "" }, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                TeksPenyanyi(lagu, MaterialTheme.typography.bodySmall)
                 proses[lagu.id]?.takeIf { lagu.id.isNotEmpty() }?.let { p ->
                     LinearProgressIndicator(progress = { p / 100f }, modifier = Modifier.fillMaxWidth().padding(top = 4.dp))
                 }
@@ -269,10 +271,7 @@ fun KartuLagu(lagu: Lagu, lebar: Dp = 168.dp, onKlik: () -> Unit) {
                 lagu.judul, maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold,
                 style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 6.dp),
             )
-            Text(
-                lagu.artis, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            TeksPenyanyi(lagu, MaterialTheme.typography.bodySmall)
         }
         MenuLagu(lagu, menu, { menu = false })
     }
@@ -316,13 +315,59 @@ fun Kosong(teks: String) {
 }
 
 @Composable
-fun KepalaPenyanyi(nama: String) {
+fun KepalaPenyanyi(nama: String, foto: String = "", besar: Boolean = true) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            Modifier.size(56.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant),
-            contentAlignment = Alignment.Center,
-        ) { Icon(Icons.Filled.Person, null, Modifier.size(32.dp)) }
+        FotoPenyanyi(nama, foto, if (besar) 72.dp else 48.dp)
         Spacer(Modifier.width(16.dp))
-        Text(nama, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text(
+            nama, style = if (besar) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+        )
     }
+}
+
+/** Foto profil channel (bulat). Belum ada foto -> huruf depan nama. */
+@Composable
+fun FotoPenyanyi(nama: String, foto: String, ukuran: Dp) {
+    if (foto.isNotEmpty()) {
+        Sampul(foto, ukuran, CircleShape)
+        return
+    }
+    Box(
+        Modifier.size(ukuran).clip(CircleShape).background(MaterialTheme.colorScheme.secondaryContainer),
+        contentAlignment = Alignment.Center,
+    ) {
+        val huruf = nama.trim().firstOrNull { it.isLetterOrDigit() }?.uppercase()
+        if (huruf != null) {
+            Text(
+                huruf, color = MaterialTheme.colorScheme.onSecondaryContainer, fontWeight = FontWeight.Bold,
+                style = if (ukuran >= 48.dp) MaterialTheme.typography.titleLarge else MaterialTheme.typography.labelMedium,
+            )
+        } else {
+            Icon(Icons.Filled.Person, null, Modifier.size(ukuran / 2), tint = MaterialTheme.colorScheme.onSecondaryContainer)
+        }
+    }
+}
+
+/**
+ * Nama penyanyi yang bisa diklik (membuka channel): ada tanda ›, kursor jadi tangan,
+ * dan bergaris bawah saat disorot — supaya pengguna tahu nama ini bisa diklik.
+ */
+@Composable
+fun TeksPenyanyi(lagu: Lagu, gaya: TextStyle, modifier: Modifier = Modifier) {
+    val bisa = !lagu.lokal && lagu.channel.isNotEmpty()
+    val teks = lagu.artis.ifEmpty { if (lagu.lokal) "File di PC" else "" }
+    if (!bisa) {
+        Text(teks, modifier, maxLines = 1, overflow = TextOverflow.Ellipsis, style = gaya, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        return
+    }
+    val hover = remember { MutableInteractionSource() }
+    val disorot by hover.collectIsHoveredAsState()
+    Text(
+        "$teks ›",
+        modifier.hoverable(hover).pointerHoverIcon(PointerIcon.Hand).clickable { Status.bukaPenyanyi(lagu.artis, lagu.channel) },
+        maxLines = 1, overflow = TextOverflow.Ellipsis,
+        style = gaya.copy(textDecoration = if (disorot) TextDecoration.Underline else TextDecoration.None),
+        color = if (disorot) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }

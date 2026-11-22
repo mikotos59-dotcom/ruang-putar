@@ -4,7 +4,6 @@ import id.ruangputar.App
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -22,30 +21,39 @@ object Unduhan {
 
     fun folder(): File = File(App.data.pengaturan.value.folderMusik)
 
-    fun unduh(lagu: Lagu, selesai: (String) -> Unit) {
-        if (lagu.lokal || lagu.id in _proses.value) return
-        App.data.unduhan.value[lagu.id]?.let { if (File(it).isFile) return selesai("Sudah diunduh") }
+    /** Sudah ada file unduhannya di PC? */
+    fun sudahDiunduh(id: String): Boolean = id.isNotEmpty() && App.data.unduhan.value[id]?.let { File(it).isFile } == true
+
+    /**
+     * Unduh satu lagu sekarang juga (dipanggil oleh [AntreanUnduh], yang mengatur jeda & antrean).
+     * Mengembalikan path file. Galat dilempar ke pemanggil.
+     */
+    suspend fun unduhSekarang(lagu: Lagu): String = withContext(Dispatchers.IO) {
+        App.data.unduhan.value[lagu.id]?.let { if (File(it).isFile) return@withContext it }
         _proses.value = _proses.value + (lagu.id to 0)
-        App.scope.launch(Dispatchers.IO) {
-            val pesan = try {
-                val cache = Proksi.tungguLengkap(lagu.id) { p -> _proses.value = _proses.value + (lagu.id to p) }
-                val dir = folder().apply { mkdirs() }
-                val nama = aman("${lagu.artis.ifBlank { "Tanpa artis" }} - ${lagu.judul}")
-                var tujuan = File(dir, "$nama.${cache.extension}")
-                var n = 2
-                while (tujuan.exists()) tujuan = File(dir, "$nama ($n).${cache.extension}").also { n++ }
-                cache.copyTo(tujuan)
-                simpanSampul(lagu)
-                App.data.catatUnduhan(lagu.id, tujuan.path)
-                "✓ “${lagu.judul}” tersimpan di ${dir.name}"
-            } catch (e: Exception) {
-                if (YouTube.adalahGalatBot(e)) "YouTube sedang menahan permintaan. Coba unduh lagi nanti."
-                else "Gagal mengunduh “${lagu.judul}”: ${e.message ?: e.javaClass.simpleName}"
-            } finally {
-                _proses.value = _proses.value - lagu.id
-            }
-            withContext(Dispatchers.Main) { selesai(pesan) }
+        try {
+            val cache = Proksi.tungguLengkap(lagu.id) { p -> _proses.value = _proses.value + (lagu.id to p) }
+            val dir = folder().apply { mkdirs() }
+            val nama = aman("${lagu.artis.ifBlank { "Tanpa artis" }} - ${lagu.judul}")
+            var tujuan = File(dir, "$nama.${cache.extension}")
+            var n = 2
+            while (tujuan.exists()) tujuan = File(dir, "$nama ($n).${cache.extension}").also { n++ }
+            cache.copyTo(tujuan)
+            simpanSampul(lagu)
+            App.data.catatUnduhan(lagu.id, tujuan.path)
+            tujuan.path
+        } finally {
+            _proses.value = _proses.value - lagu.id
         }
+    }
+
+    /** Hapus file unduhan sebuah lagu (dan sampulnya). Lagu tetap bisa diputar online. */
+    fun hapusFile(id: String): Boolean {
+        val path = App.data.unduhan.value[id] ?: return false
+        val ok = runCatching { File(path).delete() }.getOrDefault(false)
+        runCatching { fileSampul(id).delete() }
+        App.data.lupakanUnduhan(id)
+        return ok
     }
 
     private fun aman(nama: String) = nama.replace(Regex("[\\\\/:*?\"<>|\\p{Cntrl}]"), "_").trim().trimEnd('.').take(120)

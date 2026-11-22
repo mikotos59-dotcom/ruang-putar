@@ -6,7 +6,10 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import id.ruangputar.App
+import id.ruangputar.inti.AntreanUnduh
 import id.ruangputar.inti.DitahanYouTube
+import id.ruangputar.inti.InfoPlaylist
+import id.ruangputar.inti.Playlist
 import id.ruangputar.inti.Hasil
 import id.ruangputar.inti.Lagu
 import id.ruangputar.inti.Pemutar
@@ -16,13 +19,14 @@ import id.ruangputar.inti.Unduhan
 import id.ruangputar.inti.YouTube
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.launch
 
 enum class Tab(val judul: String) { BERANDA("Beranda"), CARI("Cari"), PUSTAKA("Pustaka"), PENGATURAN("Pengaturan") }
 
-enum class TabPustaka(val judul: String) { FAVORIT("Favorit"), RIWAYAT("Riwayat"), OFFLINE("Offline"), PENYANYI("Penyanyi") }
+enum class TabPustaka(val judul: String) { FAVORIT("Favorit"), PLAYLIST("Playlist"), RIWAYAT("Riwayat"), OFFLINE("Offline"), PENYANYI("Penyanyi") }
 
 /** Daftar berhalaman (hasil cari / lagu penyanyi) dengan tombol ◀ ▶. */
 class Halaman(private val ambil: suspend (org.schabi.newpipe.extractor.Page?) -> Hasil) {
@@ -72,6 +76,18 @@ class Halaman(private val ambil: suspend (org.schabi.newpipe.extractor.Page?) ->
     }
 }
 
+/** Halaman playlist YouTube yang dibuka dari link: dimuat bertahap (± 100 lagu per halaman). */
+class HalamanPlaylistYt(val url: String) {
+    var info by mutableStateOf<InfoPlaylist?>(null)
+    var lagu by mutableStateOf<List<Lagu>>(emptyList())
+    var berikut: org.schabi.newpipe.extractor.Page? = null
+    var adaBerikut by mutableStateOf(false)
+    var memuat by mutableStateOf(false)
+    var galat by mutableStateOf<String?>(null)
+    /** Sedang diimpor: jumlah lagu yang sudah terkumpul (-1 = tidak sedang mengimpor). */
+    var impor by mutableIntStateOf(-1)
+}
+
 /** Status tampilan: halaman yang dibuka, hasil cari, rak, pesan. */
 object Status {
     /** Scope di thread tampilan (Swing/EDT). */
@@ -98,6 +114,8 @@ object Status {
     fun buka(t: Tab) {
         penyanyiDibuka = null
         halamanPenyanyi = null
+        playlistDibuka = null
+        playlistYt = null
         tab = t
         if (t == Tab.CARI) mintaFokusCari++
     }
@@ -109,13 +127,29 @@ object Status {
 
     fun alihIkuti(nama: String, url: String) {
         if (url.isEmpty()) return kabar("Channel penyanyi ini tidak diketahui")
-        kabar(if (data.alihkanIkuti(nama, url)) "Mengikuti $nama" else "Berhenti mengikuti $nama")
+        val ikut = data.alihkanIkuti(nama, url, YouTube.fotoTersimpan(url) ?: "")
+        kabar(if (ikut) "Mengikuti $nama" else "Berhenti mengikuti $nama")
+        if (ikut && YouTube.fotoTersimpan(url) == null) {
+            scope.launch { runCatching { YouTube.fotoChannel(url) }.getOrNull()?.let { data.aturFotoPenyanyi(url, it) } }
+        }
+    }
+
+    /** Penyanyi yang diikuti tapi belum punya foto profil: dilengkapi pelan-pelan (sekali saat aplikasi dibuka). */
+    fun lengkapiFotoPenyanyi() {
+        scope.launch {
+            for (p in data.penyanyi.value.filter { it.foto.isEmpty() }) {
+                if (YouTube.sedangDitahan) break
+                runCatching { YouTube.fotoChannel(p.url) }.getOrNull()?.let { data.aturFotoPenyanyi(p.url, it) }
+                delay(2500)
+            }
+        }
     }
 
     fun unduh(lagu: Lagu) {
         if (lagu.lokal) return kabar("Lagu ini sudah ada di PC")
-        kabar("Mengunduh “${lagu.judul}”…")
-        Unduhan.unduh(lagu) { kabar(it) }
+        if (Unduhan.sudahDiunduh(lagu.id)) return kabar("Sudah ada di Offline")
+        if (AntreanUnduh.tambah(listOf(lagu)) == 0) return kabar("Sudah ada di antrean unduhan")
+        kabar(if (AntreanUnduh.info.value.antre.size > 1) "Ditambahkan ke antrean unduhan" else "Mengunduh “${lagu.judul}”…")
     }
 
     // ------------------------------------------------------------------ cari
@@ -130,7 +164,7 @@ object Status {
     fun cari(teks: String, maksMenit: Int = 0, judul: String = "", minDetik: Int = -1) {
         val t = teks.trim()
         if (t.isEmpty()) return
-        if (t.startsWith("http") && YouTube.idDari(t) != null) return bukaTautan(t)
+        if (t.startsWith("http") && (YouTube.idDari(t) != null || YouTube.adalahPlaylist(t))) return bukaTautan(t)
         kueri = t
         judulCari = judul.ifEmpty { "Hasil: $t" }
         val filter = data.pengaturan.value.filterCari
@@ -158,7 +192,11 @@ object Status {
     /** Link YouTube ditempel / dibuka: judulnya diambil, lalu langsung diputar. */
     fun bukaTautan(teks: String) {
         val url = Regex("https?://\\S+").find(teks)?.value ?: return kabar("Tidak ada link di teks itu")
-        val id = YouTube.idDari(url) ?: return kabar("Link itu bukan link lagu YouTube")
+        val id = YouTube.idDari(url)
+        if (id == null) {
+            if (YouTube.adalahPlaylist(url)) return bukaPlaylistYouTube(url)
+            return kabar("Link itu bukan link lagu / playlist YouTube")
+        }
         kabar("Membuka link…")
         scope.launch {
             val lagu = try {
@@ -175,9 +213,18 @@ object Status {
     // ------------------------------------------------------------------ penyanyi
     fun bukaPenyanyi(nama: String, url: String) {
         if (url.isEmpty()) return kabar("Channel penyanyi ini tidak diketahui")
-        val h = Halaman { p -> YouTube.laguChannel(url, nama, p) }
+        val h = Halaman { p ->
+            YouTube.laguChannel(url, nama, p).also {
+                // foto profil ikut diketahui saat channel dibuka
+                YouTube.fotoTersimpan(url)?.let { f ->
+                    if (penyanyiDibuka?.url == url) penyanyiDibuka = penyanyiDibuka?.copy(foto = f)
+                    data.aturFotoPenyanyi(url, f)
+                }
+            }
+        }
         halamanPenyanyi = h
-        penyanyiDibuka = Penyanyi(nama, url)
+        val foto = data.penyanyi.value.firstOrNull { it.url == url }?.foto?.ifEmpty { null } ?: YouTube.fotoTersimpan(url) ?: ""
+        penyanyiDibuka = Penyanyi(nama, url, foto)
         h.mulai()
     }
 
@@ -196,6 +243,196 @@ object Status {
             kabar("Rak ${p.nama} ditambahkan ke Beranda")
         }
     }
+
+    // ------------------------------------------------------------------ playlist sendiri
+    /** Playlist yang sedang dibuka (id), di dalam tab Pustaka. */
+    var playlistDibuka by mutableStateOf<String?>(null)
+        private set
+
+    /** Lagu yang sedang mau dimasukkan ke playlist (jendela "Tambah ke playlist"). */
+    var tambahKePlaylist by mutableStateOf<List<Lagu>?>(null)
+
+    /** Playlist yang sedang ditawarkan untuk diunduh (jendela "Unduh playlist"). */
+    var unduhPlaylist by mutableStateOf<String?>(null)
+
+    fun bukaPlaylist(id: String) {
+        penyanyiDibuka = null
+        halamanPenyanyi = null
+        playlistYt = null
+        playlistDibuka = id
+        tabPustaka = TabPustaka.PLAYLIST
+        tab = Tab.PUSTAKA
+    }
+
+    fun tutupPlaylist() {
+        playlistDibuka = null
+    }
+
+    fun buatPlaylist(nama: String, lagu: List<Lagu> = emptyList()): Playlist {
+        val p = data.buatPlaylist(nama, lagu)
+        kabar("Playlist “${p.nama}” dibuat")
+        return p
+    }
+
+    /** Masukkan lagu ke playlist. Playlist offline: lagu baru langsung masuk antrean unduhan. */
+    fun masukkanKePlaylist(id: String, lagu: List<Lagu>) {
+        val p = data.playlistDengan(id) ?: return
+        val masuk = lagu.filter { data.tambahKePlaylist(id, it) }
+        when {
+            masuk.isEmpty() -> kabar(if (lagu.size == 1) "Sudah ada di ${p.nama}" else "Semua lagu sudah ada di ${p.nama}")
+            p.offline -> {
+                val n = AntreanUnduh.tambah(masuk, p.nama)
+                kabar("Ditambahkan ke ${p.nama}" + if (n > 0) " — sedang diunduh" else "")
+            }
+            else -> kabar(if (masuk.size == 1) "Ditambahkan ke ${p.nama}" else "${masuk.size} lagu ditambahkan ke ${p.nama}")
+        }
+    }
+
+    /** Keluarkan lagu dari playlist; [hapusFile] = file unduhannya ikut dihapus. */
+    fun keluarkanDariPlaylist(id: String, lagu: Lagu, hapusFile: Boolean) {
+        data.hapusDariPlaylist(id, lagu.kunci)
+        if (hapusFile && !lagu.lokal && Unduhan.hapusFile(lagu.id)) muatOffline()
+    }
+
+    /** Perlu bertanya "hapus juga file unduhannya?" saat lagu dikeluarkan dari playlist ini? */
+    fun perluTanyaFile(id: String, lagu: Lagu): Boolean {
+        val p = data.playlistDengan(id) ?: return false
+        return p.offline && !lagu.lokal && Unduhan.sudahDiunduh(lagu.id) && !data.diPlaylistOffline(lagu.kunci, kecuali = id)
+    }
+
+    /** Mulai unduh playlist. [semua] = seluruh lagu -> playlist ditandai offline (lagu baru ikut diunduh). */
+    fun mulaiUnduhPlaylist(id: String, daftar: List<Lagu>, semua: Boolean) {
+        val p = data.playlistDengan(id) ?: return
+        if (semua) data.aturOfflinePlaylist(id, true)
+        val n = AntreanUnduh.tambah(daftar, p.nama)
+        kabar(if (n > 0) "Mengunduh $n lagu dari ${p.nama}" else "Semua lagu itu sudah diunduh")
+    }
+
+    /** Hapus file unduhan lagu-lagu playlist ini (kecuali yang masih dipakai playlist offline lain). Playlist tetap ada. */
+    fun hapusUnduhanPlaylist(id: String) {
+        val p = data.playlistDengan(id) ?: return
+        data.aturOfflinePlaylist(id, false)
+        var n = 0
+        p.lagu.filter { !it.lokal && Unduhan.sudahDiunduh(it.id) && !data.diPlaylistOffline(it.kunci, kecuali = id) }
+            .forEach { if (Unduhan.hapusFile(it.id)) n++ }
+        muatOffline()
+        kabar("$n file unduhan dihapus. ${p.nama} kembali jadi playlist online.")
+    }
+
+    fun hapusPlaylist(id: String) {
+        val p = data.playlistDengan(id) ?: return
+        data.hapusPlaylist(id)
+        if (playlistDibuka == id) playlistDibuka = null
+        kabar("Playlist “${p.nama}” dihapus")
+    }
+
+    // ------------------------------------------------------------------ playlist YouTube
+    var playlistYt by mutableStateOf<HalamanPlaylistYt?>(null)
+        private set
+
+    fun bukaPlaylistYouTube(url: String) {
+        val h = HalamanPlaylistYt(url)
+        penyanyiDibuka = null
+        halamanPenyanyi = null
+        playlistDibuka = null
+        playlistYt = h
+        h.memuat = true
+        scope.launch {
+            try {
+                val (info, hasil) = YouTube.bukaPlaylist(url)
+                h.info = info
+                h.lagu = hasil.lagu
+                h.berikut = hasil.berikut
+                h.adaBerikut = hasil.berikut != null
+            } catch (e: DitahanYouTube) {
+                h.galat = "YouTube sedang menahan permintaan (dikira bot). Coba lagi beberapa saat lagi."
+            } catch (e: Exception) {
+                h.galat = "Playlist tidak bisa dibuka (mungkin pribadi atau sudah dihapus)."
+            } finally {
+                h.memuat = false
+            }
+        }
+    }
+
+    fun tutupPlaylistYt() {
+        playlistYt = null
+    }
+
+    fun muatLagiPlaylistYt(h: HalamanPlaylistYt) {
+        val hal = h.berikut ?: return
+        if (h.memuat) return
+        h.memuat = true
+        scope.launch {
+            try {
+                val r = YouTube.lanjutPlaylist(h.url, hal)
+                val ada = h.lagu.map { it.id }.toSet()
+                h.lagu = h.lagu + r.lagu.filter { it.id !in ada }
+                h.berikut = r.berikut
+                h.adaBerikut = r.berikut != null
+            } catch (e: Exception) {
+                kabar(if (e is DitahanYouTube) "YouTube sedang menahan permintaan. Coba lagi nanti." else "Gagal memuat lagu berikutnya")
+            } finally {
+                h.memuat = false
+            }
+        }
+    }
+
+    /** Putar bertahap: yang sudah dimuat diputar, 100 berikutnya diambil saat antrean tinggal 5 lagu. */
+    fun putarPlaylistYt(h: HalamanPlaylistYt, mulai: Int = 0, acak: Boolean = false) {
+        if (h.lagu.isEmpty()) return
+        if (acak) Pemutar.putarAcak(h.lagu) else Pemutar.putar(h.lagu, mulai)
+        var hal = h.berikut
+        if (hal != null && !acak) {
+            Pemutar.ambilLanjutan = {
+                val sekarang = hal
+                if (sekarang == null) {
+                    emptyList()
+                } else {
+                    val r = YouTube.lanjutPlaylist(h.url, sekarang)
+                    hal = r.berikut
+                    r.lagu
+                }
+            }
+        }
+    }
+
+    /** Ambil semua halaman (maks. 1.000 lagu, dengan jeda), lalu simpan jadi playlist sendiri. */
+    fun imporPlaylistYt(h: HalamanPlaylistYt) {
+        if (h.impor >= 0) return
+        val info = h.info ?: return
+        h.impor = h.lagu.size
+        scope.launch {
+            val semua = h.lagu.toMutableList()
+            var hal = h.berikut
+            var terputus = false
+            while (hal != null && semua.size < BATAS_IMPOR) {
+                delay(1200)                                              // pelan-pelan, supaya tidak dikira bot
+                try {
+                    val r = YouTube.lanjutPlaylist(h.url, hal)
+                    val ada = semua.map { it.id }.toSet()
+                    semua += r.lagu.filter { it.id !in ada }
+                    hal = r.berikut
+                    h.impor = semua.size
+                } catch (e: Exception) {
+                    terputus = true
+                    break
+                }
+            }
+            val daftar = semua.take(BATAS_IMPOR)
+            val p = data.buatPlaylist(info.nama, daftar, info.url)
+            h.impor = -1
+            kabar(
+                "Disimpan: “${p.nama}” (${daftar.size} lagu)" + when {
+                    terputus -> " — sebagian tidak terambil, coba impor lagi nanti"
+                    hal != null -> " — dibatasi $BATAS_IMPOR lagu"
+                    else -> ""
+                },
+            )
+            bukaPlaylist(p.id)
+        }
+    }
+
+    const val BATAS_IMPOR = 1000
 
     // ------------------------------------------------------------------ rak beranda
     val isiRak = mutableStateMapOf<String, List<Lagu>>()

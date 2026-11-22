@@ -57,6 +57,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberTrayState
 import androidx.compose.ui.window.rememberWindowState
+import id.ruangputar.inti.AntreanUnduh
 import id.ruangputar.inti.Catatan
 import id.ruangputar.inti.Impor
 import id.ruangputar.inti.Mesin
@@ -65,6 +66,13 @@ import id.ruangputar.inti.Pemutar
 import id.ruangputar.inti.Proksi
 import id.ruangputar.ui.BarPemutar
 import id.ruangputar.ui.DialogPembaruan
+import id.ruangputar.ui.FotoPenyanyi
+import id.ruangputar.ui.BagianPlaylistSamping
+import id.ruangputar.ui.DialogUnduhPlaylist
+import id.ruangputar.ui.DialogTambahKePlaylist
+import id.ruangputar.ui.PanelUnduhan
+import id.ruangputar.ui.LayarPlaylist
+import id.ruangputar.ui.LayarPlaylistYt
 import id.ruangputar.ui.Ikon
 import id.ruangputar.ui.LayarBeranda
 import id.ruangputar.ui.LayarCari
@@ -181,6 +189,8 @@ fun mulaiAplikasi(args: Array<String>) {
                 if (p.startsWith("buka\t")) bukaArgumen(p.removePrefix("buka\t").split('\t'))
             }
             Pemutar.kabar = { Status.kabar(it) }
+            AntreanUnduh.kabar = { Status.kabar(it) }
+            AntreanUnduh.muat()
             bukaArgumen(args.toList())
             // data Ruang Putar lama (yt-dlp) -> impor sekali
             if (!App.data.pengaturan.value.sudahImpor && Impor.ada()) {
@@ -197,6 +207,8 @@ fun mulaiAplikasi(args: Array<String>) {
             if (Mesin.gagalSebelumnya != null) Status.kabar("Mesin YouTube baru gagal dipakai — kembali ke mesin bawaan.")
             delay(5000)
             mesinBerhasilDibuka()
+            delay(5000)
+            Status.lengkapiFotoPenyanyi()
         }
         DisposableEffect(terlihat, pengaturan.notifikasi) {
             Pemutar.saatGanti = { lagu ->
@@ -267,8 +279,14 @@ fun mulaiAplikasi(args: Array<String>) {
                         Box(Modifier.weight(1f).fillMaxHeight()) {
                             val p = Status.penyanyiDibuka
                             val h = Status.halamanPenyanyi
+                            val yt = Status.playlistYt
+                            val pl = Status.playlistDibuka
                             if (p != null && h != null) {
                                 LayarPenyanyi(p, h)
+                            } else if (yt != null) {
+                                LayarPlaylistYt(yt)
+                            } else if (pl != null && Status.tab == Tab.PUSTAKA) {
+                                LayarPlaylist(pl)
                             } else {
                                 when (Status.tab) {
                                     Tab.BERANDA -> LayarBeranda()
@@ -290,9 +308,12 @@ fun mulaiAplikasi(args: Array<String>) {
                         }
                         if (Status.panelAntrean) PanelAntrean()
                     }
+                    PanelUnduhan()
                     BarPemutar()
                 }
                 DialogPembaruan()
+                DialogTambahKePlaylist()
+                DialogUnduhPlaylist()
             }
         }
     }
@@ -309,7 +330,7 @@ private fun BilahSamping() {
             Spacer(Modifier.width(10.dp))
             Text("Ruang Putar", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         }
-        val terpilih = if (Status.penyanyiDibuka != null) null else Status.tab
+        val terpilih = if (Status.penyanyiDibuka != null || Status.playlistYt != null || Status.playlistDibuka != null) null else Status.tab
         val warna = NavigationDrawerItemDefaults.colors(unselectedContainerColor = MaterialTheme.colorScheme.surfaceContainer)
         NavigationDrawerItem(label = { Text("Beranda") }, selected = terpilih == Tab.BERANDA, onClick = { Status.buka(Tab.BERANDA) },
             icon = { Icon(Icons.Filled.Home, null) }, colors = warna)
@@ -320,9 +341,11 @@ private fun BilahSamping() {
         NavigationDrawerItem(label = { Text("Pengaturan") }, selected = terpilih == Tab.PENGATURAN, onClick = { Status.buka(Tab.PENGATURAN) },
             icon = { Icon(Icons.Filled.Settings, null) }, colors = warna)
         HorizontalDivider(Modifier.padding(vertical = 12.dp))
-        Text("PENYANYI", Modifier.padding(start = 12.dp, bottom = 4.dp), style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+            BagianPlaylistSamping()
+            Spacer(Modifier.height(12.dp))
+            Text("PENYANYI", Modifier.padding(start = 12.dp, bottom = 4.dp), style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (penyanyi.isEmpty()) {
                 Text("Klik kanan lagu → Ikuti", Modifier.padding(start = 12.dp, top = 4.dp), style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -332,7 +355,7 @@ private fun BilahSamping() {
                     Modifier.fillMaxWidth().clickable { Status.bukaPenyanyi(p.nama, p.url) }.padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(Icons.Filled.Person, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    FotoPenyanyi(p.nama, p.foto, 24.dp)
                     Spacer(Modifier.width(10.dp))
                     Text(p.nama, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium,
                         fontWeight = if (Status.penyanyiDibuka?.url == p.url) FontWeight.Bold else FontWeight.Normal)

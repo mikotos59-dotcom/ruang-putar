@@ -107,7 +107,9 @@ fun LayarPengaturan() {
                 }
                 BarisPilihan(
                     "Kecepatan unduh", listOf("rendah" to "Rendah ± 1 MB/s", "normal" to "Normal ± 3 MB/s", "tanpa" to "Tanpa batas"), p.kecepatan,
-                    "Berlaku untuk semua unduhan sekaligus (putar & Offline). Rendah = tidak mengganggu game.",
+                    "Berlaku untuk semua unduhan sekaligus (putar & Offline). Rendah = tidak mengganggu game. " +
+                        "Tanpa batas = paling cepat, tapi bisa membuat internet lag dan lebih cepat dicurigai YouTube. " +
+                        "Unduhan banyak lagu selalu diberi jeda otomatis (bukan error).",
                 ) { v -> Status.data.ubahPengaturan { it.copy(kecepatan = v) } }
                 val ukuran = remember { mutableLongStateOf(0L) }
                 LaunchedEffect(Unit) { ukuran.longValue = withContext(Dispatchers.IO) { Proksi.ukuranCache() } }

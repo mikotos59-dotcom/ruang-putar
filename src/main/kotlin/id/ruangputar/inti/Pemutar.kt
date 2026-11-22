@@ -64,6 +64,13 @@ object Pemutar {
     var potongAkhir by mutableStateOf<Double?>(null)
         private set
 
+    /**
+     * Pengambil lagu berikutnya untuk playlist YouTube yang diputar bertahap: saat antrean tinggal
+     * 5 lagu, 100 lagu berikutnya diambil diam-diam. Mengembalikan daftar kosong = sudah habis.
+     */
+    var ambilLanjutan: (suspend () -> List<Lagu>)? = null
+    private var mengambilLanjutan = false
+
     private var tugasTimer: Job? = null
     private var posisiTertunda = 0.0
     private val sudahDicobaUlang = HashSet<String>()
@@ -145,6 +152,7 @@ object Pemutar {
     // ------------------------------------------------------------------ antrean
     fun putar(daftar: List<Lagu>, mulaiDari: Int = 0) {
         if (daftar.isEmpty()) return
+        ambilLanjutan = null
         antrean = daftar
         mainkan(mulaiDari.coerceIn(0, daftar.size - 1))
     }
@@ -205,6 +213,29 @@ object Pemutar {
     private fun mainkan(i: Int) {
         indeks = i
         muatLagu(antrean[i])
+        cekLanjutan()
+    }
+
+    private fun cekLanjutan() {
+        val ambil = ambilLanjutan ?: return
+        if (mengambilLanjutan || indeks < antrean.size - 5) return
+        mengambilLanjutan = true
+        App.scope.launch(Dispatchers.Main) {
+            try {
+                val baru = ambil()
+                if (ambilLanjutan !== ambil) return@launch          // antrean sudah diganti
+                if (baru.isEmpty()) {
+                    ambilLanjutan = null
+                } else {
+                    val ada = antrean.map { it.kunci }.toSet()
+                    antrean = antrean + baru.filter { it.kunci !in ada }
+                }
+            } catch (e: Exception) {
+                // dicoba lagi saat lagu berikutnya diputar
+            } finally {
+                mengambilLanjutan = false
+            }
+        }
     }
 
     private fun muatLagu(lagu: Lagu, posisiAwal: Double = 0.0) {

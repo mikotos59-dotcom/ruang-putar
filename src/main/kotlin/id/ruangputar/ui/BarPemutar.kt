@@ -72,11 +72,7 @@ fun BarPemutar() {
                     Sampul(lagu.sampul, 60.dp)
                     Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                         Text(lagu.judul, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
-                        Text(
-                            lagu.artis, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = if (lagu.channel.isNotEmpty()) Modifier.clickable { Status.bukaPenyanyi(lagu.artis, lagu.channel) } else Modifier,
-                        )
+                        TeksPenyanyi(lagu, MaterialTheme.typography.bodySmall)
                     }
                     val fav = favorit.any { it.kunci == lagu.kunci }
                     IconButton(onClick = { Status.alihFavorit(lagu) }) {
