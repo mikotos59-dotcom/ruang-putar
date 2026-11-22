@@ -84,8 +84,15 @@ object Pembaruan {
             folder().listFiles()?.forEach { it.delete() }
             Catatan.simpan("kode_terpasang", Versi.KODE.toString())
         }
-        if (System.currentTimeMillis() - Catatan.angka("terakhir_cek") < SEHARI) return
-        cek(manual = false)
+        // seperti versi HP: setiap kali dibuka langsung cek, kalau ada versi baru muncul jendela pembaruan
+        cek(manual = false, saatBuka = true)
+        // selama aplikasi terbuka lama (mis. di tray), cek lagi tiap 6 jam
+        App.scope.launch {
+            while (true) {
+                delay(6 * SEJAM)
+                cek(manual = false)
+            }
+        }
     }
 
     fun catatBerhasil() = gagalBeruntun.set(0)
@@ -100,7 +107,7 @@ object Pembaruan {
         Mesin.cek(manual = false)
     }
 
-    fun cek(manual: Boolean) {
+    fun cek(manual: Boolean, saatBuka: Boolean = false) {
         if (tugas?.isActive == true) return
         tugas = App.scope.launch(Dispatchers.IO) {
             val sebelum = _status.value
@@ -112,7 +119,7 @@ object Pembaruan {
                 if (info != null && info.kode > Versi.KODE) {
                     _status.value = info
                     val dilewati = Catatan.ambil("dilewati").toIntOrNull() ?: 0
-                    if (manual || karenaMasalah.value || info.kode != dilewati) tawarkan.value = true
+                    if (manual || saatBuka || karenaMasalah.value || info.kode != dilewati) tawarkan.value = true
                 } else {
                     _status.value = if (manual) Status.Terbaru else Status.Diam
                     karenaMasalah.value = false
@@ -219,11 +226,30 @@ object Pembaruan {
         }
         try {
             App.data.simpanSekarang()
-            ProcessBuilder(file.absolutePath, "/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CLOSEAPPLICATIONS")
-                .directory(file.parentFile)
-                .start()
+            Pemutar.tutup()
+            // Installer baru dijalankan SETELAH Ruang Putar benar-benar tertutup. Dulu installer jalan saat
+            // aplikasi masih menutup diri -> file terkunci -> pemasangan terhenti di tengah dan
+            // RuangPutar.cfg hilang ("Error opening ... RuangPutar.cfg").
+            val pid = ProcessHandle.current().pid()
+            val log = File(file.parentFile, "pasang.log")
+            fun kutip(t: String) = "'" + t.replace("'", "''") + "'"
+            val argumen = listOf("/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CLOSEAPPLICATIONS", "/LOG=\"${log.absolutePath}\"")
+                .joinToString(",") { kutip(it) }
+            val skrip = "Wait-Process -Id $pid -Timeout 90 -ErrorAction SilentlyContinue; " +
+                "Start-Sleep -Seconds 2; " +
+                "Start-Process -FilePath ${kutip(file.absolutePath)} -ArgumentList $argumen"
+            val lewatPs = runCatching {
+                ProcessBuilder("powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-Command", skrip)
+                    .directory(file.parentFile)
+                    .start()
+            }.isSuccess
+            if (!lewatPs) {
+                ProcessBuilder(file.absolutePath, "/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CLOSEAPPLICATIONS")
+                    .directory(file.parentFile)
+                    .start()
+            }
             App.scope.launch {
-                delay(1500)
+                delay(500)
                 exitProcess(0)
             }
         } catch (e: Exception) {
