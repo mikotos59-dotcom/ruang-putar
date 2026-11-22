@@ -109,7 +109,7 @@ fun LayarBeranda() {
     var tambahRak by remember { mutableStateOf(false) }
 
     GulirKolom {
-        item { KepalaBeranda(temaBatik(pengaturan.tema)) }
+        item { KepalaBeranda(temaBatik(pengaturan.tema), temaHacker(pengaturan.tema)) }
         if (ditahan > System.currentTimeMillis()) item { BannerDitahan() }
         if (sering.isNotEmpty()) {
             item {
@@ -146,7 +146,7 @@ fun LayarBeranda() {
 }
 
 @Composable
-private fun KepalaBeranda(batik: Boolean) {
+private fun KepalaBeranda(batik: Boolean, hacker: Boolean = false) {
     val jam = LocalTime.now().hour
     val sapa = when (jam) {
         in 4..10 -> "pagi"
@@ -154,6 +154,7 @@ private fun KepalaBeranda(batik: Boolean) {
         in 15..17 -> "sore"
         else -> "malam"
     }
+    if (hacker) return KepalaHacker(sapa)
     Box(Modifier.fillMaxWidth().height(if (batik) 150.dp else 110.dp)) {
         if (batik) {
             MotifKawung(Modifier.fillMaxSize(), MaterialTheme.colorScheme.secondary.copy(alpha = 0.22f))
@@ -162,6 +163,40 @@ private fun KepalaBeranda(batik: Boolean) {
         Column(Modifier.align(Alignment.BottomStart).padding(horizontal = 24.dp, vertical = 12.dp)) {
             Text("Selamat $sapa", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
             Text("Musik untukmu hari ini.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Box(Modifier.align(Alignment.TopEnd).padding(top = 10.dp, end = 16.dp)) { TombolBagikanBeranda() }
+    }
+}
+
+/** Kepala Beranda tema Hacker: hujan angka biner samar + sapaan ala terminal dengan kursor berkedip. */
+@Composable
+private fun KepalaHacker(sapa: String) {
+    val biner = remember {
+        val acak = java.util.Random()
+        (1..9).joinToString("\n") { (1..160).joinToString("") { if (acak.nextInt(5) == 0) " " else acak.nextInt(2).toString() } }
+    }
+    var kursor by remember { mutableStateOf(true) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(530)
+            kursor = !kursor
+        }
+    }
+    Box(Modifier.fillMaxWidth().height(150.dp)) {
+        Text(
+            biner, maxLines = 9, softWrap = false,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.13f),
+            modifier = Modifier.fillMaxSize(),
+        )
+        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, MaterialTheme.colorScheme.background))))
+        Column(Modifier.align(Alignment.BottomStart).padding(horizontal = 24.dp, vertical = 12.dp)) {
+            Text(
+                "> selamat_$sapa" + if (kursor) "█" else " ",
+                style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Text("root@ruangputar:~$ putar --musik untukmu", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Box(Modifier.align(Alignment.TopEnd).padding(top = 10.dp, end = 16.dp)) { TombolBagikanBeranda() }
     }

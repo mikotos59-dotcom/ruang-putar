@@ -5,6 +5,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
@@ -15,6 +16,8 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 
 private val Gelap = darkColorScheme(
@@ -83,6 +86,38 @@ private val BatikTerang = lightColorScheme(
     outline = Color(0xFFCBB89A),
 )
 
+/** Hacker: layar terminal — hitam pekat, hijau neon, huruf monospace. */
+private val Hacker = darkColorScheme(
+    primary = Color(0xFF39FF6A),
+    onPrimary = Color(0xFF00110A),
+    secondary = Color(0xFF1FCB4F),
+    background = Color(0xFF020604),
+    onBackground = Color(0xFFB6FFC8),
+    surface = Color(0xFF050B07),
+    onSurface = Color(0xFFB6FFC8),
+    surfaceVariant = Color(0xFF0C1A11),
+    onSurfaceVariant = Color(0xFF5FBF7A),
+    surfaceContainer = Color(0xFF07110B),
+    secondaryContainer = Color(0xFF0F2A18),
+    onSecondaryContainer = Color(0xFF9DFFB4),
+    outline = Color(0xFF1A3D25),
+)
+
+/** Semua gaya huruf Material diganti monospace (untuk tema Hacker). */
+private fun hurufMono(): Typography {
+    val t = Typography()
+    fun TextStyle.mono() = copy(fontFamily = FontFamily.Monospace)
+    return Typography(
+        displayLarge = t.displayLarge.mono(), displayMedium = t.displayMedium.mono(), displaySmall = t.displaySmall.mono(),
+        headlineLarge = t.headlineLarge.mono(), headlineMedium = t.headlineMedium.mono(), headlineSmall = t.headlineSmall.mono(),
+        titleLarge = t.titleLarge.mono(), titleMedium = t.titleMedium.mono(), titleSmall = t.titleSmall.mono(),
+        bodyLarge = t.bodyLarge.mono(), bodyMedium = t.bodyMedium.mono(), bodySmall = t.bodySmall.mono(),
+        labelLarge = t.labelLarge.mono(), labelMedium = t.labelMedium.mono(), labelSmall = t.labelSmall.mono(),
+    )
+}
+
+fun temaHacker(nama: String) = nama == "hacker"
+
 /** Tema bermotif batik (Beranda memakai motif kawung). */
 fun temaBatik(nama: String) = nama == "batik" || nama == "batik-terang"
 
@@ -93,10 +128,12 @@ fun TemaRuangPutar(nama: String, isi: @Composable () -> Unit) {
         "gelap" -> Gelap
         "otomatis" -> if (isSystemInDarkTheme()) Gelap else Terang
         "batik-terang" -> BatikTerang
+        "hacker" -> Hacker
         else -> Batik
     }
+    val huruf = if (nama == "hacker") hurufMono() else Typography()
     // teks & ikon bawaan mengikuti tema (bukan hitam), juga di luar Surface
-    MaterialTheme(colorScheme = skema) {
+    MaterialTheme(colorScheme = skema, typography = huruf) {
         CompositionLocalProvider(LocalContentColor provides skema.onBackground, content = isi)
     }
 }
