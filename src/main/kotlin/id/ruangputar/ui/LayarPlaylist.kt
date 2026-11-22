@@ -579,7 +579,7 @@ fun PanelUnduhan() {
                     }
                     else -> {
                         val nomor = (info.selesai + info.gagal.size + (if (info.kini != null) 1 else 0)).coerceAtMost(info.total)
-                        val sisa = AntreanUnduh.perkiraan(info.antre).second + when (k) {
+                        val sisa = AntreanUnduh.perkiraan(info.antre.map { it.lagu }).second + when (k) {
                             is AntreanUnduh.Keadaan.Istirahat -> ((k.sampai - kini) / 1000).coerceAtLeast(0L)
                             else -> 0L
                         }
