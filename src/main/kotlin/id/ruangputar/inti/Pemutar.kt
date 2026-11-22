@@ -58,6 +58,12 @@ object Pemutar {
     var timerSampai by mutableLongStateOf(0L)
         private set
 
+    /** Potongan ulang (A–B): awal & akhir dalam detik. null = belum ditandai. */
+    var potongAwal by mutableStateOf<Double?>(null)
+        private set
+    var potongAkhir by mutableStateOf<Double?>(null)
+        private set
+
     private var tugasTimer: Job? = null
     private var posisiTertunda = 0.0
     private val sudahDicobaUlang = HashSet<String>()
@@ -82,6 +88,9 @@ object Pemutar {
                     Triple(mm.bacaAngka("time-pos"), mm.bacaAngka("duration"), mm.baca("pause"))
                 }
                 p.first?.let { posisi = it }
+                // cadangan kalau ab-loop mpv tidak bekerja: kembalikan ke awal potongan
+                val a = potongAwal; val b = potongAkhir
+                if (a != null && b != null && !memuat && posisi > b + 0.6) geserKe(a)
                 p.second?.let { if (it > 0) durasi = it }
                 if (laguKini != null && !memuat) main = p.third == "no"
             }
@@ -103,6 +112,7 @@ object Pemutar {
                     val t = posisiTertunda
                     posisiTertunda = 0.0
                     if (t > 1) mpv?.perintah("seek", "%.2f".format(java.util.Locale.ROOT, t), "absolute")
+                    terapkanPotong()
                 }
                 is Mpv.Kejadian.LaguSelesai -> App.scope.launch(Dispatchers.Main) { laguSelesai(k.alasan, k.galat) }
                 null -> Unit
@@ -199,6 +209,7 @@ object Pemutar {
 
     private fun muatLagu(lagu: Lagu, posisiAwal: Double = 0.0) {
         val m = mpv ?: return kabar(galatMesin ?: "Mesin pemutar belum siap")
+        if (laguKini?.id != lagu.id) hapusPotong(diam = true)
         laguKini = lagu
         memuat = true
         posisi = posisiAwal
@@ -289,7 +300,51 @@ object Pemutar {
         kabar(listOf("Ulang: mati", "Ulang: semua antrean", "Ulang: lagu ini")[ulang])
     }
 
+    // ------------------------------------------------------------------ potongan ulang (gunting)
+    /**
+     * Tombol gunting: klik 1 = tandai awal, klik 2 = tandai akhir lalu ulang potongan dari awal,
+     * klik 3 (ikon tong sampah) = hapus potongan.
+     */
+    fun alihPotong() {
+        if (laguKini == null) return
+        val a = potongAwal
+        when {
+            a == null -> {
+                potongAwal = posisi
+                kabar("Awal potongan ${formatWaktu(posisi.toLong())} — klik gunting lagi di bagian akhir")
+            }
+            potongAkhir == null -> {
+                if (posisi < a + 1) {
+                    kabar("Akhir potongan harus setelah ${formatWaktu(a.toLong())}")
+                    return
+                }
+                potongAkhir = posisi
+                terapkanPotong()
+                geserKe(a)
+                kabar("Mengulang ${formatWaktu(a.toLong())} – ${formatWaktu(posisi.toLong())}")
+            }
+            else -> hapusPotong()
+        }
+    }
+
+    fun hapusPotong(diam: Boolean = false) {
+        val ada = potongAwal != null
+        potongAwal = null
+        potongAkhir = null
+        mpv?.atur("ab-loop-a", "no")
+        mpv?.atur("ab-loop-b", "no")
+        if (ada && !diam) kabar("Potongan dihapus")
+    }
+
+    private fun terapkanPotong() {
+        val a = potongAwal ?: return
+        val b = potongAkhir ?: return
+        mpv?.atur("ab-loop-a", "%.2f".format(java.util.Locale.ROOT, a))
+        mpv?.atur("ab-loop-b", "%.2f".format(java.util.Locale.ROOT, b))
+    }
+
     fun berhenti() {
+        hapusPotong(diam = true)
         mpv?.perintah("stop")
         laguKini = null
         main = false

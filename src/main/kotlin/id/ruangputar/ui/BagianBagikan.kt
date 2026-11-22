@@ -8,8 +8,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -103,5 +109,23 @@ private fun KodeQr(teks: String) {
                 if (matriks.get(x, y)) drawRect(Color.Black, Offset(x * sel, y * sel), Size(sel + 0.5f, sel + 0.5f))
             }
         }
+    }
+}
+
+/** Tombol kecil di pojok Beranda: membuka jendela Bagikan (pesan, tautan, QR). */
+@Composable
+fun TombolBagikanBeranda() {
+    var buka by remember { mutableStateOf(false) }
+    TextButton(onClick = { buka = true }) {
+        Icon(Icons.Filled.Share, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Bagikan", Modifier.padding(start = 6.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    if (buka) {
+        AlertDialog(
+            onDismissRequest = { buka = false },
+            title = { Text("Bagikan Ruang Putar") },
+            text = { Box(Modifier.widthIn(max = 640.dp)) { BagianBagikan() } },
+            confirmButton = { TextButton(onClick = { buka = false }) { Text("Tutup") } },
+        )
     }
 }

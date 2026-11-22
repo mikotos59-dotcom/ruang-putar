@@ -49,6 +49,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -162,6 +163,7 @@ private fun KepalaBeranda(batik: Boolean) {
             Text("Selamat $sapa", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
             Text("Musik untukmu hari ini.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+        Box(Modifier.align(Alignment.TopEnd).padding(top = 10.dp, end = 16.dp)) { TombolBagikanBeranda() }
     }
 }
 

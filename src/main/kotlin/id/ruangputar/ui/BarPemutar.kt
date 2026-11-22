@@ -21,6 +21,7 @@ import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -64,7 +65,7 @@ fun BarPemutar() {
     val unduhan by Status.data.unduhan.collectAsState()
     val proses by Unduhan.proses.collectAsState()
     Surface(color = MaterialTheme.colorScheme.surfaceContainer, tonalElevation = 2.dp) {
-        Row(Modifier.fillMaxWidth().height(88.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().height(96.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             // ----------------------------------------------------------- kiri: lagu
             Row(Modifier.weight(0.3f), verticalAlignment = Alignment.CenterVertically) {
                 if (lagu != null) {
@@ -116,6 +117,7 @@ fun BarPemutar() {
                             tint = if (Pemutar.ulang > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+                    TombolPotong()
                 }
                 GeserWaktu()
             }
@@ -166,6 +168,31 @@ private fun GeserWaktu() {
             modifier = Modifier.weight(1f).height(24.dp),
         )
         Text(formatWaktu(durasi.toLong()), style = MaterialTheme.typography.labelSmall, modifier = Modifier.width(44.dp).padding(start = 6.dp))
+    }
+    Pemutar.potongAwal?.let { a ->
+        val b = Pemutar.potongAkhir
+        Text(
+            if (b == null) "✂ ${formatWaktu(a.toLong())} – …" else "✂ ${formatWaktu(a.toLong())} – ${formatWaktu(b.toLong())}",
+            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary,
+        )
+    }
+}
+
+/** Gunting: klik 1 tandai awal, klik 2 tandai akhir & ulang, klik 3 (tong sampah) hapus. */
+@Composable
+private fun TombolPotong() {
+    val a = Pemutar.potongAwal
+    val b = Pemutar.potongAkhir
+    val ket = when {
+        a == null -> "Potong & ulang: klik untuk tandai awal"
+        b == null -> "Awal ${formatWaktu(a.toLong())} — klik lagi untuk tandai akhir"
+        else -> "Mengulang ${formatWaktu(a.toLong())}–${formatWaktu(b.toLong())} — klik untuk hapus"
+    }
+    IconButton(onClick = { Pemutar.alihPotong() }, enabled = Pemutar.laguKini != null) {
+        Icon(
+            if (b != null) Icons.Filled.Delete else Ikon.Gunting, ket,
+            tint = if (a != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
