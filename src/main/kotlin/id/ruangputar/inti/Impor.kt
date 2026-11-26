@@ -101,7 +101,7 @@ object Impor {
         if (p != null) {
             App.data.ubahPengaturan { s ->
                 s.copy(
-                    tema = p.optString("tema", s.tema).takeIf { it in setOf("gelap", "terang", "batik", "batik-terang", "hacker", "otomatis") } ?: s.tema,
+                    tema = p.optString("tema", s.tema).takeIf { it in setOf("gelap", "terang", "batik", "batik-terang", "hacker", "senja", "otomatis") } ?: s.tema,
                     volume = p.optInt("volume", s.volume).coerceIn(0, 100),
                     folderMusik = p.optString("folder_musik").takeIf { it.isNotBlank() && File(it).parentFile?.isDirectory == true } ?: s.folderMusik,
                     minDetik = p.optInt("min_detik", s.minDetik),

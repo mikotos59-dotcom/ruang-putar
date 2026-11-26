@@ -109,7 +109,7 @@ fun LayarBeranda() {
     var tambahRak by remember { mutableStateOf(false) }
 
     GulirKolom {
-        item { KepalaBeranda(temaBatik(pengaturan.tema), temaHacker(pengaturan.tema)) }
+        item { KepalaBeranda(temaBatik(pengaturan.tema), temaHacker(pengaturan.tema), temaSenja(pengaturan.tema)) }
         if (ditahan > System.currentTimeMillis()) item { BannerDitahan() }
         if (sering.isNotEmpty()) {
             item {
@@ -146,7 +146,7 @@ fun LayarBeranda() {
 }
 
 @Composable
-private fun KepalaBeranda(batik: Boolean, hacker: Boolean = false) {
+private fun KepalaBeranda(batik: Boolean, hacker: Boolean = false, senja: Boolean = false) {
     val jam = LocalTime.now().hour
     val sapa = when (jam) {
         in 4..10 -> "pagi"
@@ -155,6 +155,7 @@ private fun KepalaBeranda(batik: Boolean, hacker: Boolean = false) {
         else -> "malam"
     }
     if (hacker) return KepalaHacker(sapa)
+    if (senja) return KepalaSenja(sapa)
     Box(Modifier.fillMaxWidth().height(if (batik) 150.dp else 110.dp)) {
         if (batik) {
             MotifKawung(Modifier.fillMaxSize(), MaterialTheme.colorScheme.secondary.copy(alpha = 0.22f))

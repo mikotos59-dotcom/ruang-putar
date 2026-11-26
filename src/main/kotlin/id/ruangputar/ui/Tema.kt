@@ -129,6 +129,7 @@ fun TemaRuangPutar(nama: String, isi: @Composable () -> Unit) {
         "otomatis" -> if (isSystemInDarkTheme()) Gelap else Terang
         "batik-terang" -> BatikTerang
         "hacker" -> Hacker
+        "senja" -> SenjaNeon
         else -> Batik
     }
     val huruf = if (nama == "hacker") hurufMono() else Typography()
