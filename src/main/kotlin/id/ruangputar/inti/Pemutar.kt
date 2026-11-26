@@ -95,6 +95,7 @@ object Pemutar {
                     Triple(mm.bacaAngka("time-pos"), mm.bacaAngka("duration"), mm.baca("pause"))
                 }
                 p.first?.let { posisi = it }
+                if (main) TombolMedia.terakhirMain = System.currentTimeMillis()
                 // cadangan kalau ab-loop mpv tidak bekerja: kembalikan ke awal potongan
                 val a = potongAwal; val b = potongAkhir
                 if (a != null && b != null && !memuat && posisi > b + 0.6) geserKe(a)

@@ -117,11 +117,12 @@ data class Pengaturan(
     val tutupKeTray: Boolean = true,     // tombol X = sembunyi ke tray (musik tetap jalan)
     val notifikasi: Boolean = true,      // kabar lagu berganti saat jendela tersembunyi
     val sudahImpor: Boolean = false,     // data Ruang Putar lama (yt-dlp) sudah diimpor
+    val tombolMedia: String = "otomatis", // otomatis | selalu | mati — tombol media keyboard / NumDeck
 ) {
     fun keJson(): JSONObject = JSONObject().put("tema", tema).put("kualitas", kualitas)
         .put("kecepatan", kecepatan).put("cacheMb", cacheMb).put("filterCari", filterCari).put("minDetik", minDetik)
         .put("volume", volume).put("folderMusik", folderMusik).put("tutupKeTray", tutupKeTray)
-        .put("notifikasi", notifikasi).put("sudahImpor", sudahImpor)
+        .put("notifikasi", notifikasi).put("sudahImpor", sudahImpor).put("tombolMedia", tombolMedia)
 
     val batasByte: Long
         get() = when (kecepatan) {
@@ -143,6 +144,7 @@ data class Pengaturan(
             tutupKeTray = o.optBoolean("tutupKeTray", true),
             notifikasi = o.optBoolean("notifikasi", true),
             sudahImpor = o.optBoolean("sudahImpor", false),
+            tombolMedia = o.optString("tombolMedia", "otomatis").ifBlank { "otomatis" },
         )
     }
 }

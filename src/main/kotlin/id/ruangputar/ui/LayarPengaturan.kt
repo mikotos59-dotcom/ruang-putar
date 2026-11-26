@@ -79,6 +79,15 @@ fun LayarPengaturan() {
                 BarisSaklar("Kabar lagu berganti", p.notifikasi, "Muncul di pojok layar saat jendela sedang disembunyikan.") { v ->
                     Status.data.ubahPengaturan { it.copy(notifikasi = v) }
                 }
+                BarisPilihan(
+                    "Tombol media keyboard (⏯ ⏭ ⏮)",
+                    listOf("otomatis" to "Otomatis", "selalu" to "Selalu Ruang Putar", "mati" to "Mati"), p.tombolMedia,
+                    "Putar/jeda, lagu berikutnya & sebelumnya dari tombol media keyboard, Fn + media, atau NumDeck. " +
+                        "Otomatis = dipakai Ruang Putar saat sedang memutar (atau baru dijeda < 10 menit); selain itu dibiarkan untuk " +
+                        "pemutar lain seperti YouTube di browser. Volume tetap memakai volume Windows.",
+                ) { v ->
+                    Status.data.ubahPengaturan { it.copy(tombolMedia = v) }
+                }
 
                 Bagian("Pencarian & Beranda")
                 BarisPilihan("Durasi minimal lagu", PILIHAN_MIN.map { (d, t) -> d.toString() to t }, p.minDetik.toString(),

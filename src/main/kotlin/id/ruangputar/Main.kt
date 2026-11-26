@@ -64,6 +64,7 @@ import id.ruangputar.inti.Mesin
 import id.ruangputar.inti.Pembaruan
 import id.ruangputar.inti.Pemutar
 import id.ruangputar.inti.Proksi
+import id.ruangputar.inti.TombolMedia
 import id.ruangputar.ui.BarPemutar
 import id.ruangputar.ui.DialogPembaruan
 import id.ruangputar.ui.FotoPenyanyi
@@ -189,6 +190,7 @@ fun mulaiAplikasi(args: Array<String>) {
                 if (p.startsWith("buka\t")) bukaArgumen(p.removePrefix("buka\t").split('\t'))
             }
             Pemutar.kabar = { Status.kabar(it) }
+            TombolMedia.mulai()
             AntreanUnduh.kabar = { Status.kabar(it) }
             AntreanUnduh.muat()
             bukaArgumen(args.toList())
